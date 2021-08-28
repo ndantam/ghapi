@@ -129,18 +129,24 @@
 
 (defun org-purge (&key  (org *org*)
                     keep-members
-                    (keep-teams "students"))
-    (let ((members (org-member-ids org)))
-      (dolist (member members)
-        (unless (or (equalp member *username*)
-                    (position member keep-members :test #'equalp))
-          (format t "~&Deleting member ~A..." member)
-          (org-delete-member :org org :member member))))
-    (let ((teams (org-team-ids org)))
-      (dolist (team teams)
-        (unless (position team keep-teams :test #'equalp)
-          (format t "~&Deleting team ~A..." team)
-          (org-delete-team :org org :team team)))))
+                    (keep-teams '("students")))
+  (declare (type list keep-members keep-teams))
+  (dolist (x keep-members)
+    (check-type x string ))
+  (dolist (x keep-teams)
+    (check-type x string))
+  ;; body
+  (let ((members (org-member-ids org)))
+    (dolist (member members)
+      (unless (or (equalp member *username*)
+                  (position member keep-members :test #'equalp))
+        (format t "~&Deleting member ~A..." member)
+        (org-delete-member :org org :member member))))
+  (let ((teams (org-team-ids org)))
+    (dolist (team teams)
+      (unless (position team keep-teams :test #'equalp)
+        (format t "~&Deleting team ~A..." team)
+        (org-delete-team :org org :team team)))))
 
 
 
