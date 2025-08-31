@@ -27,19 +27,24 @@
 (defun %request (&key
                    (path "")
                    (method :get))
-  (assert (and (boundp '*username*) *username*
-               (boundp '*password*) *password*))
+  (unless (boundp '*token*) (load-token))
+  (assert (boundp '*token*))
   (let* ((url (format nil "https://api.github.com/~A" path)))
     (multiple-value-bind
           (body status-code headers uri stream)
         (drakma:http-request url
                              :method method
+                             :additional-headers
+                             `(("Authorization" . ,(concatenate 'string "Bearer "
+                                                                *token*))
+                               ("X-GitHub-Api-Version". "2022-11-28"))
                              :close (if *stream* nil t)
                              :stream (if (eq *stream* :open)
                                          nil
                                          *stream*)
                              :decode-content t
-                             :basic-authorization (list *username* *password*))
+                             ;; :basic-authorization (list *username* *password*)
+                             )
       (declare (ignore uri))
       (when *stream*
         (setq *stream* stream))
