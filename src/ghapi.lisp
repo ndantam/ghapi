@@ -127,27 +127,49 @@
       (error "Refusing to delete current user: ~A" *username*)
       (request-delete  "orgs/~A/memberships/~A" org member)))
 
-(defun org-purge (&key  (org *org*)
+;; TODO: recurse until everything is deleted
+(defun org-purge (&key (org *org*)
                     keep-members
                     (keep-teams '("students")))
   (declare (type list keep-members keep-teams))
+  (assert (username-valid-p *username*))
   (dolist (x keep-members)
     (check-type x string ))
   (dolist (x keep-teams)
     (check-type x string))
   ;; body
-  (let ((members (org-member-ids org)))
+  (let ((members (org-member-ids org))
+        (teams (org-team-ids org))
+        keep*-members delete-members
+        keep*-teams delete-teams)
+    ;; Find members
     (dolist (member members)
-      (unless (or (equalp member *username*)
-                  (position member keep-members :test #'equalp))
-        (format t "~&Deleting member ~A..." member)
-        (org-delete-member :org org :member member))))
-  (let ((teams (org-team-ids org)))
+      (if (or (equalp member *username*)
+              (position member keep-members :test #'equalp))
+          (push member keep*-members)
+          (push member delete-members)))
+    ;; Find Teams
     (dolist (team teams)
-      (unless (position team keep-teams :test #'equalp)
+      (if (position team keep-teams :test #'equalp)
+          (push team keep*-teams)
+          (push team delete-teams)))
+    (setq keep*-members (sort keep*-members #'string<)
+          delete-members (sort delete-members #'string<)
+          keep*-teams (sort keep*-teams #'string<)
+          delete-teams (sort delete-teams #'string<))
+
+    (format t "~&Keep members: ~{~A~^, ~}" keep*-members)
+    (format t "~&Keep teams: ~{~A~^, ~}" keep*-teams)
+    (format t "~&Delete members: ~{~A~^, ~}" delete-members)
+    (format t "~&Delete teams: ~{~A~^, ~}" delete-teams)
+
+    (when (yes-or-no-p "Proceed?")
+      (dolist (member delete-members)
+        (format t "~&Deleting member ~A..." member)
+        (org-delete-member :org org :member member))
+      (dolist (team delete-teams)
         (format t "~&Deleting team ~A..." team)
         (org-delete-team :org org :team team)))))
-
 
 
 (defun driver ()
