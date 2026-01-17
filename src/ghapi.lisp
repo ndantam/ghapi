@@ -80,7 +80,7 @@
 ;;; Teams ;;;
 
 (defun org-teams (&optional (org *org*))
-  (request "orgs/~A/teams" org))
+  (request "orgs/~A/teams?per_page=128" org))
 
 (defun org-team-ids (&optional (org *org*))
   (let ((teams (org-teams org)))
@@ -113,10 +113,14 @@
          (format t "~&Adding `~A'~%" member)
          (team-add-member id member))))
 
-(defun org-delete-team (&key (org *org*) team)
+(defun org-delete-team (&key (org *org*) team slug)
   (assert (not (equalp "owners" team)))
+  (assert (or team slug))
+  (assert (not (and team slug)))
   (request-delete  "orgs/~A/teams/~A" org
-                   (drakma:url-encode  team :utf-8)))
+                   (if slug
+                       slug
+                       (drakma:url-encode team :utf-8))))
 
 
 (defun org-delete-member (&key (org *org*) member)
@@ -138,10 +142,13 @@
   (dolist (x keep-teams)
     (check-type x string))
   ;; body
-  (let ((members (org-member-ids org))
-        (teams (org-team-ids org))
+  (let ((members (sort (org-member-ids org) #'string-greaterp))
+        (team-alist (sort (org-teams org)
+                          #'string-greaterp
+                          :key (lambda (alist) (cdr (assoc :name alist)))))
         keep*-members delete-members
-        keep*-teams delete-teams)
+        keep*-teams delete-teams
+        keep*-slugs delete-slugs)
     ;; Find members
     (dolist (member members)
       (if (or (equalp member *username*)
@@ -149,57 +156,64 @@
           (push member keep*-members)
           (push member delete-members)))
     ;; Find Teams
-    (dolist (team teams)
-      (if (position team keep-teams :test #'equalp)
-          (push team keep*-teams)
-          (push team delete-teams)))
-    (setq keep*-members (sort keep*-members #'string<)
-          delete-members (sort delete-members #'string<)
-          keep*-teams (sort keep*-teams #'string<)
-          delete-teams (sort delete-teams #'string<))
+    (dolist (team team-alist)
+      (let ((name (cdr (assoc :name team)))
+            (slug (cdr (assoc :slug team))))
+        (if (position name keep-teams :test #'equalp)
+            (progn
+              (push name keep*-teams)
+              (push slug keep*-slugs))
+            (progn
+              (push name delete-teams)
+              (push slug delete-slugs)))))
+
 
     (format t "~&Keep members: ~{~A~^, ~}" keep*-members)
     (format t "~&Keep teams: ~{~A~^, ~}" keep*-teams)
+    (format t "~&Keep slugs: ~{~A~^, ~}" keep*-slugs)
     (format t "~&Delete members: ~{~A~^, ~}" delete-members)
     (format t "~&Delete teams: ~{~A~^, ~}" delete-teams)
-
+    (format t "~&Delete slugs: ~{~A~^, ~}" delete-slugs)
+    (terpri)
     (when (yes-or-no-p "Proceed?")
       (dolist (member delete-members)
         (format t "~&Deleting member ~A..." member)
         (org-delete-member :org org :member member))
-      (dolist (team delete-teams)
-        (format t "~&Deleting team ~A..." team)
-        (org-delete-team :org org :team team)))))
+      (loop for name in delete-teams
+            for slug in delete-slugs
+            do
+               (format t "~&Deleting team ~A (~A)..." name slug)
+               (org-delete-team :org org :slug slug)))))
 
 
-(defun driver ()
-  (let ((org (sb-posix:getenv "GHCLASS_ORG"))
-        (cmd (sb-posix:getenv "GHCLASS_CMD"))
-        (opt1 (sb-posix:getenv "GHCLASS_OPT1"))
-        (opt2 (sb-posix:getenv "GHCLASS_OPT2")))
-    (load-cred)
-    (assert *username*)
-    (assert *password*)
-    (assert (not (zerop (length org))))
-    (assert (not (zerop (length cmd))))
-    (assert (not (zerop (length opt1))))
+;; (defun driver ()
+;;   (let ((org (sb-posix:getenv "GHCLASS_ORG"))
+;;         (cmd (sb-posix:getenv "GHCLASS_CMD"))
+;;         (opt1 (sb-posix:getenv "GHCLASS_OPT1"))
+;;         (opt2 (sb-posix:getenv "GHCLASS_OPT2")))
+;;     (load-cred)
+;;     (assert *username*)
+;;     (assert *password*)
+;;     (assert (not (zerop (length org))))
+;;     (assert (not (zerop (length cmd))))
+;;     (assert (not (zerop (length opt1))))
 
-    (format t "~&> ghclass ~A ~A ~A ~A~%"
-            org cmd opt1 (or opt2 ""))
-    (cond
-      ((string= cmd "clone-prefix")
-       (org-repos-prefix opt1
-                         :org org
-                         :clone-directory (if (zerop (length opt2))
-                                              (sb-posix:getcwd)
-                                              opt2)))
-      (t (error "Unknown command")))))
-
-
+;;     (format t "~&> ghclass ~A ~A ~A ~A~%"
+;;             org cmd opt1 (or opt2 ""))
+;;     (cond
+;;       ((string= cmd "clone-prefix")
+;;        (org-repos-prefix opt1
+;;                          :org org
+;;                          :clone-directory (if (zerop (length opt2))
+;;                                               (sb-posix:getcwd)
+;;                                               opt2)))
+;;       (t (error "Unknown command")))))
 
 
-;; (defun eof-json-decode (stream)
-;;   (handler-case (json:decode-json stream)
-;;     (end-of-file (e)
-;;       (declare (ignore e))
-;;       nil)))
+
+
+;; ;; (defun eof-json-decode (stream)
+;; ;;   (handler-case (json:decode-json stream)
+;; ;;     (end-of-file (e)
+;; ;;       (declare (ignore e))
+;; ;;       nil)))
