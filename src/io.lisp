@@ -27,8 +27,10 @@
 (defun %request (&key
                    (path "")
                    (method :get))
-  (unless (boundp '*token*) (load-token))
+  (unless (and (boundp '*token*) *token*)
+    (load-token))
   (assert (boundp '*token*))
+  (assert '*token*)
   (let* ((url (format nil "https://api.github.com/~A" path)))
     (multiple-value-bind
           (body status-code headers uri stream)
