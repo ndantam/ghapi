@@ -89,11 +89,15 @@
 
 (defun org-member-ids (&optional (org *org*))
   (with-requests
-    (let* ((org-data (request "orgs/~A" org))
-           (org-plan (cdr (assoc :plan org-data)))
-           (member-count (cdr (assoc :filled--seats org-plan))))
-      (loop for m in (request "orgs/~A/members?per_page=~D" org member-count)
-         collect (cdr (assoc :login m))))))
+    (let (members)
+      (loop for page from 1
+            for response = (request "orgs/~A/members?page=~D" org page)
+            while response
+            do
+               (dolist (m response)
+                 (push (cdr (assoc :login m))
+                       members)))
+      members)))
 
 (defun org-team (&key (org *org*) team)
   (request "orgs/~A/teams/~A" org team))
